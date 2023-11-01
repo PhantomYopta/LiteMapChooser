@@ -21,4 +21,5 @@ The config is created automatically in the same place where the dll is located
 
 # Commands
 **ccs_rtv**,**!rtv**- starts the map change process
+
 **css_nominate**,**!nominate** - opens the map menu
