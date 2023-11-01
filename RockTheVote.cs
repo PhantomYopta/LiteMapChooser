@@ -98,8 +98,7 @@ public class RockTheVote : BasePlugin
             PrintToChat(player, "RTV has already ended, you cannot start it again or nominate maps.");
             return;
         }
-
-        PrintToChat(player, $"{_isVotingActive}");
+        
         if (!_isVotingActive)
         {
             PrintToChat(player, "Rock the Vote is not allowed yet.");
