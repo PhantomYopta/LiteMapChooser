@@ -20,5 +20,5 @@ The config is created automatically in the same place where the dll is located
 ```
 
 # Commands
-<span style="background-color:#ffffff; padding: 2px 5px; border: 1px solid #000;"css_rtv</span><span style="background-color:#ffffff; padding: 2px 5px; border: 1px solid #000;">!rtv</span> - starts the map change process
-<span style="background-color:#ffffff; padding: 2px 5px; border: 1px solid #000;"css_nominate</span><span style="background-color:#ffffff; padding: 2px 5px; border: 1px solid #000;">!nominate</span> - opens the map menu
+**ccs_rtv**,**!rtv**- starts the map change process
+**css_nominate**,**!nominate** - opens the map menu
