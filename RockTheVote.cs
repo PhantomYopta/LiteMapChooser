@@ -3,6 +3,7 @@ using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Modules.Entities;
+using CounterStrikeSharp.API.Modules.Memory;
 using CounterStrikeSharp.API.Modules.Menu;
 using CounterStrikeSharp.API.Modules.Timers;
 using Timer = CounterStrikeSharp.API.Modules.Timers.Timer;
@@ -64,7 +65,6 @@ public class RockTheVote : BasePlugin
         AddCommand("css_nominate", "", ((player, info) =>
         {
             var mapsPath = Path.Combine(ModuleDirectory, "maps.txt");
-
             var mapList = File.ReadAllLines(mapsPath);
             var nominateMenu = new ChatMenu("Nominate");
             foreach (var map in mapList)
@@ -106,7 +106,7 @@ public class RockTheVote : BasePlugin
         }
 
         var countPlayers = _usersArray.Count(user => user != null);
-        var countVote = countPlayers * _config.Needed;
+        var countVote = (int)(countPlayers * _config.Needed) == 0 ? 1 : countPlayers * _config.Needed;
         var user = _usersArray[player.EntityIndex!.Value.Value]!;
         if (user.VotedRtv)
         {
