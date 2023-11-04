@@ -18,6 +18,22 @@ The config is created automatically in the same place where the dll is located
   "Needed": 0.6 //Percentage of players needed to rockthevote
 }
 ```
+for maps from the workshop, add the prefix "ws:" to maps.txt
+```
+cs_italy
+cs_office
+de_dust2
+de_inferno
+de_mirage
+de_nuke
+de_overpass
+de_vertigo
+ws:surf_beginner
+ws:surf_void
+ws:surf_utopia_njv
+ws:surf_ace
+ws:surf_kitsune_cs2
+```
 
 # Commands
 **ccs_rtv**,**!rtv** - starts the map change process
