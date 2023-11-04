@@ -32,6 +32,12 @@ public class RockTheVote : BasePlugin
     public override void Load(bool hotReload)
     {
         _config = LoadConfig();
+
+        string mapsFilePath = Path.Combine(ModuleDirectory, "maps.txt");
+
+        if (!File.Exists(mapsFilePath))
+            File.WriteAllText(mapsFilePath, "");
+
         RegisterEventHandler<EventRoundEnd>(EventRoundEnd);
         RegisterListener<Listeners.OnClientConnected>(slot =>
         {
@@ -68,7 +74,11 @@ public class RockTheVote : BasePlugin
             var mapList = File.ReadAllLines(mapsPath);
             var nominateMenu = new ChatMenu("Nominate");
             foreach (var map in mapList)
-                nominateMenu.AddMenuOption($"{map}", HandleNominate);
+            {
+                string mapName = map.Replace("ws:", "").Trim();
+                nominateMenu.AddMenuOption(mapName, HandleNominate);
+            }
+
             if (player == null) return;
             ChatMenus.OpenMenu(player, nominateMenu);
         }));
@@ -83,7 +93,10 @@ public class RockTheVote : BasePlugin
         }
         else if (_countRounds == _config.MaxRounds)
         {
-            Server.ExecuteCommand($"map {_selectedMap}");
+            if (!IsWsMaps(_selectedMap))
+                Server.ExecuteCommand($"map {_selectedMap}");
+            else
+                Server.ExecuteCommand($"ds_workshop_changelevel {_selectedMap}");
         }
 
         return HookResult.Continue;
@@ -98,7 +111,7 @@ public class RockTheVote : BasePlugin
             PrintToChat(player, "RTV has already ended, you cannot start it again or nominate maps.");
             return;
         }
-        
+
         if (!_isVotingActive)
         {
             PrintToChat(player, "Rock the Vote is not allowed yet.");
@@ -181,7 +194,9 @@ public class RockTheVote : BasePlugin
         _isVotingActive = false;
         var nominateMenu = new ChatMenu("RTV");
         var mapList = File.ReadAllLines(Path.Combine(ModuleDirectory, "maps.txt"));
-        var newMapList = mapList.Except(_playedMaps).Except(_proposedMaps).ToList();
+        var newMapList = mapList.Except(_playedMaps).Except(_proposedMaps)
+            .Select(map => map.StartsWith("ws:") ? map.Substring(3) : map)
+            .ToList();
 
         for (int i = 0; i < 7; i++)
         {
@@ -228,7 +243,7 @@ public class RockTheVote : BasePlugin
 
     private void TimerVoteMap(bool forced)
     {
-        if (optionCounts.Count == 0)
+        if (optionCounts.Count == 0 && forced)
         {
             PrintToChatAll("No votes received for Rock the Vote, keeping current map.");
             ResetData();
@@ -248,12 +263,27 @@ public class RockTheVote : BasePlugin
         if (forced)
         {
             PrintToChatAll($"During the voting process, the {_selectedMap} map was selected");
-            Task.Delay(TimeSpan.FromSeconds(5)).ContinueWith(_ => { Server.ExecuteCommand($"map {_selectedMap}"); });
+            Task.Delay(TimeSpan.FromSeconds(5)).ContinueWith(_ =>
+            {
+                if (IsWsMaps(_selectedMap))
+                    Server.ExecuteCommand($"ds_workshop_changelevel {_selectedMap}");
+                else
+                    Server.ExecuteCommand($"map {_selectedMap}");
+            });
         }
         else
         {
             PrintToChatAll($"During the voting process, the {_selectedMap} map was selected");
         }
+    }
+
+    private bool IsWsMaps(string selectMap)
+    {
+        var mapsPath = Path.Combine(ModuleDirectory, "maps.txt");
+        var mapList = File.ReadAllLines(mapsPath);
+
+        return mapList.Any(map => map.Trim() == "ws:" + selectMap);
+        ;
     }
 
     private void PrintToChat(CCSPlayerController controller, string msg)
@@ -306,13 +336,13 @@ public class RockTheVote : BasePlugin
         var playerEntities = Utilities.FindAllEntitiesByDesignerName<CCSPlayerController>("cs_player_controller");
         foreach (var player in playerEntities)
         {
-            _usersArray[player.EntityIndex!.Value.Value]!.VotedRtv = false;
-            _usersArray[player.EntityIndex!.Value.Value]!.ProposedMaps = null!;
+            _usersArray[player.EntityIndex!.Value.Value].VotedRtv = false;
+            _usersArray[player.EntityIndex!.Value.Value].ProposedMaps = null;
         }
 
         for (var i = 0; i < _proposedMaps.Length; i++)
         {
-            _proposedMaps[i] = null!;
+            _proposedMaps[i] = null;
         }
     }
 }
