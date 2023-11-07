@@ -2,6 +2,7 @@ using System.Text.Json;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Commands;
+using CounterStrikeSharp.API.Modules.Cvars;
 using CounterStrikeSharp.API.Modules.Entities;
 using CounterStrikeSharp.API.Modules.Memory;
 using CounterStrikeSharp.API.Modules.Menu;
@@ -12,22 +13,26 @@ namespace RockTheVote;
 
 public class RockTheVote : BasePlugin
 {
-    public override string ModuleName { get; }
-    public override string ModuleVersion { get; }
+    public override string ModuleName => "MapChooser by phantom";
+    public override string ModuleVersion => "v1.0.1";
 
     private Config _config;
     private Dictionary<string, int> optionCounts = new Dictionary<string, int>();
     private Users?[] _usersArray = new Users?[65];
-
+    private Timer? _mapTimer;
+    
     private int _votedRtv;
     private int _votedMap;
     private int _countRounds;
+    private float _timeLimit;
 
     private string? _selectedMap;
     private string[] _proposedMaps = new string[7];
     private List<string> _playedMaps = new List<string>();
 
     private bool _isVotingActive;
+    private bool IsTimeLimit;
+    private bool IsRoundLimit;
 
     public override void Load(bool hotReload)
     {
@@ -43,9 +48,28 @@ public class RockTheVote : BasePlugin
         {
             _usersArray[slot + 1] = new Users { ProposedMaps = null!, VotedRtv = false };
         });
+        RegisterEventHandler<EventRoundStart>(((@event, info) =>
+        {
+            if (_mapTimer != null) return HookResult.Continue;
+            
+            IsTimeLimit = false;
+            _timeLimit = ConVar.Find("mp_timelimit")!.GetPrimitiveValue<float>() * 60.0f;
+            
+            if (_timeLimit > 0 && _timeLimit - _config.VotingTimeInterval * 60.0f > 0)
+            {
+                _mapTimer = AddTimer(_timeLimit - _config.VotingTimeInterval,
+                    () =>
+                    {
+                        IsTimeLimit = true;
+                        VoteMap(false);
+                    });
+            }
+            return HookResult.Continue;
+        }));
         RegisterListener<Listeners.OnMapStart>(name =>
         {
             ResetData();
+            _mapTimer = null;
             _countRounds = 0;
             _selectedMap = null;
             if (_playedMaps.Count >= _config.RoundsBeforeNomination)
@@ -87,16 +111,16 @@ public class RockTheVote : BasePlugin
     private HookResult EventRoundEnd(EventRoundEnd @event, GameEventInfo info)
     {
         _countRounds++;
-        if (_countRounds == int.Abs(_config.MaxRounds - _config.VotingRoundInterval))
+        var maxrounds = ConVar.Find("mp_maxrounds").GetPrimitiveValue<int>();
+        if (_countRounds == (maxrounds - _config.VotingRoundInterval))
         {
             VoteMap(false);
         }
-        else if (_countRounds == _config.MaxRounds)
+        else if (_countRounds == maxrounds)
         {
-            if (!IsWsMaps(_selectedMap))
-                Server.ExecuteCommand($"map {_selectedMap}");
-            else
-                Server.ExecuteCommand($"ds_workshop_changelevel {_selectedMap}");
+            Server.ExecuteCommand(!IsWsMaps(_selectedMap)
+                ? $"map {_selectedMap}"
+                : $"ds_workshop_changelevel {_selectedMap}");
         }
 
         return HookResult.Continue;
@@ -198,38 +222,76 @@ public class RockTheVote : BasePlugin
             .Select(map => map.StartsWith("ws:") ? map.Substring(3) : map)
             .ToList();
 
-        for (int i = 0; i < 7; i++)
+        if (mapList.Length < 7)
         {
-            if (_proposedMaps[i] == null)
+            for (int i = 0; i < mapList.Length-1; i++)
             {
-                if (newMapList.Count > 0)
+                if (_proposedMaps[i] == null)
                 {
-                    var rand = new Random().Next(newMapList.Count);
-                    _proposedMaps[i] = newMapList[rand];
-                    newMapList.RemoveAt(rand);
-                }
-                else
-                {
-                    var unplayedMaps = _playedMaps.Except(_proposedMaps).Where(map => map != NativeAPI.GetMapName())
-                        .ToList();
-                    if (unplayedMaps.Count > 0)
+                    if (newMapList.Count > 0)
                     {
-                        var rand = new Random().Next(unplayedMaps.Count);
-                        _proposedMaps[i] = unplayedMaps[rand];
-                        unplayedMaps.RemoveAt(rand);
+                        var rand = new Random().Next(newMapList.Count);
+                        _proposedMaps[i] = newMapList[rand];
+                        newMapList.RemoveAt(rand);
+                    }
+                    else
+                    {
+                        var unplayedMaps = _playedMaps.Except(_proposedMaps).Where(map => map != NativeAPI.GetMapName())
+                            .ToList();
+                        if (unplayedMaps.Count > 0)
+                        {
+                            var rand = new Random().Next(unplayedMaps.Count);
+                            _proposedMaps[i] = unplayedMaps[rand];
+                            unplayedMaps.RemoveAt(rand);
+                        }
                     }
                 }
+                nominateMenu.AddMenuOption($"{_proposedMaps[i]}", (controller, option) =>
+                {
+                    if (!optionCounts.TryGetValue(option.Text, out int count))
+                        optionCounts[option.Text] = 1;
+                    else
+                        optionCounts[option.Text] = count + 1;
+                    _votedMap++;
+                    PrintToChatAll($"{controller.PlayerName} has selected {option.Text}");
+                });
             }
-
-            nominateMenu.AddMenuOption($"{_proposedMaps[i]}", (controller, option) =>
+        }
+        else
+        {
+            for (int i = 0; i < 7; i++)
             {
-                if (!optionCounts.TryGetValue(option.Text, out int count))
-                    optionCounts[option.Text] = 1;
-                else
-                    optionCounts[option.Text] = count + 1;
-                _votedMap++;
-                PrintToChatAll($"{controller.PlayerName} has selected {option.Text}");
-            });
+                if (_proposedMaps[i] == null)
+                {
+                    if (newMapList.Count > 0)
+                    {
+                        var rand = new Random().Next(newMapList.Count);
+                        _proposedMaps[i] = newMapList[rand];
+                        newMapList.RemoveAt(rand);
+                    }
+                    else
+                    {
+                        var unplayedMaps = _playedMaps.Except(_proposedMaps).Where(map => map != NativeAPI.GetMapName())
+                            .ToList();
+                        if (unplayedMaps.Count > 0)
+                        {
+                            var rand = new Random().Next(unplayedMaps.Count);
+                            _proposedMaps[i] = unplayedMaps[rand];
+                            unplayedMaps.RemoveAt(rand);
+                        }
+                    }
+                }
+
+                nominateMenu.AddMenuOption($"{_proposedMaps[i]}", (controller, option) =>
+                {
+                    if (!optionCounts.TryGetValue(option.Text, out int count))
+                        optionCounts[option.Text] = 1;
+                    else
+                        optionCounts[option.Text] = count + 1;
+                    _votedMap++;
+                    PrintToChatAll($"{controller.PlayerName} has selected {option.Text}");
+                });
+            }
         }
 
         var playerEntities = Utilities.FindAllEntitiesByDesignerName<CCSPlayerController>("cs_player_controller");
@@ -255,6 +317,21 @@ public class RockTheVote : BasePlugin
             var random = Random.Shared;
             _selectedMap = _proposedMaps[random.Next(_proposedMaps.Length)];
             PrintToChatAll($"During the voting process, the {_selectedMap} map was selected");
+        }
+
+        if (_selectedMap != null && !forced)
+        {
+            if (IsTimeLimit)
+            {
+                AddTimer(_config.VotingTimeInterval * 60.0f, () =>
+                {
+                    Server.ExecuteCommand(IsWsMaps(_selectedMap)
+                        ? $"ds_workshop_changelevel {_selectedMap}"
+                        : $"map {_selectedMap}");
+                });
+                return;
+            }
+
             return;
         }
 
@@ -265,16 +342,21 @@ public class RockTheVote : BasePlugin
             PrintToChatAll($"During the voting process, the {_selectedMap} map was selected");
             Task.Delay(TimeSpan.FromSeconds(5)).ContinueWith(_ =>
             {
-                if (IsWsMaps(_selectedMap))
-                    Server.ExecuteCommand($"ds_workshop_changelevel {_selectedMap}");
-                else
-                    Server.ExecuteCommand($"map {_selectedMap}");
+                Server.ExecuteCommand(IsWsMaps(_selectedMap)
+                    ? $"ds_workshop_changelevel {_selectedMap}"
+                    : $"map {_selectedMap}");
             });
+            return;
         }
-        else
+
+        PrintToChatAll($"During the voting process, the {_selectedMap} map was selected");
+        if (!IsTimeLimit) return;
+        AddTimer(_config.VotingTimeInterval * 60.0f, () =>
         {
-            PrintToChatAll($"During the voting process, the {_selectedMap} map was selected");
-        }
+            Server.ExecuteCommand(IsWsMaps(_selectedMap)
+                ? $"ds_workshop_changelevel {_selectedMap}"
+                : $"map {_selectedMap}");
+        });
     }
 
     private bool IsWsMaps(string selectMap)
@@ -312,8 +394,8 @@ public class RockTheVote : BasePlugin
         var config = new Config
         {
             Needed = 0.6,
-            MaxRounds = 26,
             VotingRoundInterval = 5,
+            VotingTimeInterval = 10,
             RoundsBeforeNomination = 6,
         };
 
@@ -350,7 +432,7 @@ public class RockTheVote : BasePlugin
 public class Config
 {
     public int RoundsBeforeNomination { get; set; }
-    public int MaxRounds { get; set; }
+    public float VotingTimeInterval { get; set; }
     public int VotingRoundInterval { get; set; }
     public double Needed { get; set; }
 }
