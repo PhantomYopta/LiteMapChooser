@@ -13,8 +13,8 @@ The config is created automatically in the same place where the dll is located
 ```
 {
   "RoundsBeforeNomination": 6,	//After how many rounds is given the opportunity to nominate a map
-  "MaxRounds": 26,	//mp_maxrounds
   "VotingRoundInterval": 5,	//How many rounds after which to start voting on a completed map
+  "VotingTimeInterval": 10.0, //How long to start voting on a completed map (in minutes)
   "Needed": 0.6 //Percentage of players needed to rockthevote
 }
 ```
